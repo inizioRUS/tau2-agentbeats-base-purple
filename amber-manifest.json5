@@ -14,7 +14,7 @@
     proxy: { kind: "a2a", optional: true },
   },
   program: {
-    image: "ghcr.io/iniziorus/tau2-agentbeats-purple_bonusllm:latest",
+    image: "ghcr.io/iniziorus/tau2-agentbeats-base-purple:latest",
     entrypoint: ["uv", "run", "src/server.py", "--host", "0.0.0.0", "--port", "9009"],
     env: {
       AGENT_LLM: "${config.agent_llm}",
