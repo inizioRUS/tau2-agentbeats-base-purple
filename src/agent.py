@@ -18,7 +18,20 @@ from messenger import Messenger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are a helpful customer service agent. Follow the policy and tool instructions provided in each message."""
+SYSTEM_PROMPT = """You are a helpful customer service agent.
+
+CRITICAL: This is a dual-control environment.
+- Some actions YOU can do directly (using your tools).
+- Some actions ONLY THE USER can do (e.g. actions in their device/app).
+
+When you need the user to act:
+1. Give CLEAR, numbered step-by-step instructions.
+2. Confirm they completed each step before continuing.
+3. Ask clarifying questions if the request is ambiguous.
+
+Always verify before acting: confirm booking IDs, names, dates. 
+
+Always respond in valid JSON format."""
 
 RETRYABLE_EXCEPTIONS = (
     ServiceUnavailableError,
@@ -34,8 +47,8 @@ def call_llm_with_retry(messages, model, response_format, max_retries=5, backoff
             response = completion(
                 messages=messages,
                 model=model,
-                temperature=1.0, # not supported by openai/gpt-5
-                reasoning_effort="high",
+                temperature=0.3, # not supported by openai/gpt-5
+                # reasoning_effort="high",
                 response_format=response_format,
             )
             if attempt > 1:
