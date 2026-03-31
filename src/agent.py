@@ -31,7 +31,7 @@ When you need the user to act:
 
 Always verify before acting: confirm booking IDs, names, dates. 
 
-Always respond in valid JSON format."""
+Always respond in valid JSON format"""
 
 RETRYABLE_EXCEPTIONS = (
     ServiceUnavailableError,
