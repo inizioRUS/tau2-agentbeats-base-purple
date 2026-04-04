@@ -4,7 +4,8 @@ import copy
 import time
 import logging
 from typing import Any, Dict, List, Optional, Tuple
-
+from pathlib import Path
+DB_PATH = Path(__file__).resolve().parent / "db.json"
 from a2a.server.tasks import TaskUpdater
 from a2a.types import Message, Part, TextPart
 from a2a.utils import get_message_text
@@ -615,7 +616,7 @@ class Agent:
         self.model = os.getenv("AGENT_LLM", "openai/gpt-4o-mini")
         self.max_retries = int(os.getenv("AGENT_LLM_MAX_RETRIES", "5"))
         self.backoff_base = int(os.getenv("AGENT_LLM_BACKOFF_BASE", "2"))
-        self.db_path = os.getenv("AIRLINE_DB_PATH", "db.json")
+        self.db_path = os.getenv("AIRLINE_DB_PATH", DB_PATH)
 
         self.db = AirlineReadOnlyDB(self.db_path)
         self.tools = AirlineReadTools(self.db)
