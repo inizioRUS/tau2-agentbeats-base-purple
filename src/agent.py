@@ -49,6 +49,15 @@ For a tool call:
   "arguments": { ... }
 }
 
+Use only these exact tool names:
+get_user
+get_user_payment_methods
+get_saved_passengers
+find_user_reservations
+get_reservation
+get_flight_status
+search_available_flights
+
 For a user response:
 {
   "type": "respond",
@@ -674,7 +683,6 @@ class Agent:
         }
 
         self.ctx_id_to_messages[context_id]["tool_history"].append(tool_event)
-        self.ctx_id_to_messages[context_id]["db_context"].append(tool_event)
 
     def _build_llm_messages(self, context_id: str) -> List[Dict[str, str]]:
         ctx = self.ctx_id_to_messages[context_id]
@@ -753,7 +761,18 @@ class Agent:
                     "content": "Internal error: invalid JSON returned by the model."
                 }
                 break
-
+            if "type" not in assistant_obj:
+                if "name" in assistant_obj and "arguments" in assistant_obj:
+                    assistant_obj = {
+                        "type": "tool_call",
+                        "name": assistant_obj["name"],
+                        "arguments": assistant_obj.get("arguments", {}),
+                    }
+                elif "content" in assistant_obj:
+                    assistant_obj = {
+                        "type": "respond",
+                        "content": assistant_obj["content"],
+                    }
             response_type = assistant_obj.get("type")
 
             if response_type == "respond":
