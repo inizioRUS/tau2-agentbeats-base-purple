@@ -719,7 +719,7 @@ class Agent:
         self._append_user_message(context_id, user_input)
 
         final_response_json = None
-        max_steps = 8
+        max_steps = 16
 
         for step in range(max_steps):
             llm_messages = self._build_llm_messages(context_id)
@@ -763,16 +763,17 @@ class Agent:
                 break
             if "type" not in assistant_obj:
                 if "name" in assistant_obj and "arguments" in assistant_obj:
-                    assistant_obj = {
-                        "type": "tool_call",
-                        "name": assistant_obj["name"],
-                        "arguments": assistant_obj.get("arguments", {}),
-                    }
-                elif "content" in assistant_obj:
-                    assistant_obj = {
-                        "type": "respond",
-                        "content": assistant_obj["content"],
-                    }
+                    if assistant_obj["name"] != "respond":
+                        assistant_obj = {
+                            "type": "tool_call",
+                            "name": assistant_obj["name"],
+                            "arguments": assistant_obj.get("arguments", {}),
+                        }
+                    else:
+                        assistant_obj = {
+                            "type": "respond",
+                            "content": assistant_obj["arguments"]["content"],
+                        }
             response_type = assistant_obj.get("type")
 
             if response_type == "respond":
