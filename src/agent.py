@@ -2,6 +2,7 @@ import os
 import logging
 import time
 import asyncio
+from email.utils import parsedate_to_datetime
 from a2a.server.tasks import TaskUpdater
 from a2a.types import Message, Part, TextPart
 from a2a.utils import get_message_text
@@ -21,96 +22,17 @@ logger = logging.getLogger(__name__)
 SYSTEM_PROMPT = """You are a helpful customer service agent.
 
 CRITICAL: This is a dual-control environment.
+- Some actions YOU can do directly (using your tools).
+- Some actions ONLY THE USER can do (e.g. actions in their device/app).
 
-* Some actions YOU can perform using available tools.
-* Some actions ONLY THE USER can perform on their own device/app.
+When you need the user to act:
+1. Give CLEAR, numbered step-by-step instructions.
+2. Confirm they completed each step before continuing.
+3. Ask clarifying questions if the request is ambiguous.
 
----
+Always verify before acting: confirm booking IDs, names, dates. 
 
-## CORE RULES
-
-1. POLICY ENFORCEMENT (HIGHEST PRIORITY)
-
-* NEVER perform actions that violate system or business rules.
-* If a request is not allowed (e.g. adding insurance, partial upgrades, removing passengers), you MUST:
-  a) Clearly and politely refuse.
-  b) Briefly explain why it is not allowed.
-  c) Offer valid alternatives if possible.
-* DO NOT comply even if the user is persistent, emotional, or repeats the request.
-
-2. ACTION VALIDATION
-
-* Before taking any action, ALWAYS verify:
-
-  * reservation_id
-  * user identity (if available)
-  * relevant details (dates, flights, passengers)
-* If required information is missing, ask for it BEFORE acting.
-
-3. PARTIAL / INVALID REQUESTS
-
-* Do NOT perform partial updates that violate constraints.
-  Examples:
-
-  * No upgrading only one leg if policy requires full itinerary change.
-  * No removing individual passengers if not supported.
-  * No changes below required pricing thresholds.
-* If a request is conditionally allowed, explain the condition and wait for user confirmation.
-
-4. MULTI-STEP TASK HANDLING
-
-* Break tasks into logical steps:
-
-  1. Retrieve data (e.g. reservation details)
-  2. Validate request against policies
-  3. Ask for confirmation (including total cost if applicable)
-  4. Execute action
-* NEVER skip confirmation for irreversible or paid actions.
-
-5. USER-REQUIRED ACTIONS
-   When the user must act:
-
-6. Provide clear, numbered steps.
-
-7. Ask the user to confirm completion before proceeding.
-
-8. Do NOT assume completion.
-
-9. PERSISTENCE HANDLING
-
-* If the user repeats an invalid request:
-
-  * Do NOT change your decision.
-  * Restate the restriction consistently.
-  * Redirect to valid options.
-
-7. DYNAMIC INTENT HANDLING
-
-* Users may introduce new requests mid-conversation.
-* Handle each request independently while maintaining context.
-* Prioritize:
-
-  1. Safety & policy
-  2. Current request
-  3. Previous unresolved tasks
-
-8. COST & PAYMENT RULES
-
-* Always clearly communicate total cost before making paid changes.
-* Only proceed after explicit user confirmation.
-* Respect constraints (e.g. budget limits implied by user).
-
----
-
-## BEHAVIOR SUMMARY
-
-* Be strict with rules, flexible with communication.
-* Do not hallucinate capabilities.
-* Do not assume permissions.
-* Do not let user pressure override policies.
-* Always guide the user toward valid outcomes.
-
-"""
+Always respond in valid JSON format."""
 
 RETRYABLE_EXCEPTIONS = (
     ServiceUnavailableError,
@@ -118,6 +40,26 @@ RETRYABLE_EXCEPTIONS = (
     Timeout,
     APIConnectionError,
 )
+
+
+def _parse_retry_after(e: Exception) -> float | None:
+    """Extract wait time in seconds from Retry-After header. Returns None if missing or > 30s."""
+    try:
+        header = e.response.headers.get("retry-after") or e.response.headers.get("Retry-After")
+        if not header:
+            return None
+        # Numeric seconds: "Retry-After: 30"
+        wait = float(header)
+        return wait if wait <= 240 else None
+    except (ValueError, AttributeError):
+        pass
+    try:
+        # HTTP date: "Retry-After: Wed, 21 Oct 2015 07:28:00 GMT"
+        retry_at = parsedate_to_datetime(header)
+        wait = (retry_at - parsedate_to_datetime(e.response.headers.get("date", ""))).total_seconds()
+        return wait if 0 <= wait <= 240 else None
+    except Exception:
+        return None
 
 
 def call_llm_with_retry(messages, model, response_format, max_retries=5, backoff_base=2):
@@ -138,12 +80,22 @@ def call_llm_with_retry(messages, model, response_format, max_retries=5, backoff
                 logger.error(f"LLM call failed after {max_retries} attempts")
                 raise
 
-            backoff_seconds = backoff_base ** attempt
+            if isinstance(e, RateLimitError):
+                retry_after = _parse_retry_after(e)
+                if retry_after is not None:
+                    wait_seconds = retry_after
+                    logger.info(f"Rate limited — using Retry-After header: {wait_seconds}s")
+                else:
+                    wait_seconds = backoff_base ** attempt
+                    logger.info(f"Rate limited — Retry-After missing or >30s, using backoff: {wait_seconds}s")
+            else:
+                wait_seconds = backoff_base ** attempt
+
             logger.warning(
                 f"LLM call failed (attempt {attempt}/{max_retries}): {type(e).__name__}: {str(e)[:100]}"
             )
-            logger.info(f"Retrying in {backoff_seconds}s...")
-            time.sleep(backoff_seconds)
+            logger.info(f"Retrying in {wait_seconds}s...")
+            time.sleep(wait_seconds)
 
 
 class Agent:
