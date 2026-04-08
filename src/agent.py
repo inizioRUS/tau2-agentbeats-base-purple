@@ -30,10 +30,7 @@ When you need the user to act:
 2. Confirm they completed each step before continuing.
 3. Ask clarifying questions if the request is ambiguous.
 
-Always verify before acting: confirm booking IDs, names, dates, certificate, luggage
-
-Always specify exactly what the user wants, the class, which date is more convenient, and how much luggage, type of pay.
-
+Always verify before acting: confirm booking IDs, names, dates. 
 
 Always respond in valid JSON format."""
 
