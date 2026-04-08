@@ -32,7 +32,8 @@ When you need the user to act:
 
 Always verify before acting: confirm booking IDs, names, dates, certificate, luggage
 
-Always specify exactly what the user wants, the class, which date is more convenient, and how much luggage
+Always specify exactly what the user wants, the class, which date is more convenient, and how much luggage, type of pay.
+
 
 Always respond in valid JSON format."""
 
