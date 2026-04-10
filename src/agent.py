@@ -3,7 +3,6 @@ import logging
 import time
 import asyncio
 from email.utils import parsedate_to_datetime
-from email.utils import parsedate_to_datetime
 from a2a.server.tasks import TaskUpdater
 from a2a.types import Message, Part, TextPart
 from a2a.utils import get_message_text
@@ -20,62 +19,37 @@ from messenger import Messenger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are a helpful customer service agent. Follow the policy and tool instructions provided in each message.
+SYSTEM_PROMPT = """You are a helpful customer service agent.
 
-## Execution framework
+CRITICAL: This is a dual-control environment.
 
-For each user request, follow this order internally:
-1. VERIFY — look up all relevant facts (user profile, reservation details, membership tier, insurance, delay/cancellation status) using tools BEFORE deciding anything.
-2. PLAN — identify every outcome the user is asking for and determine which are policy-allowed.
-3. EXECUTE — carry out all policy-allowed actions. If the user asks for multiple things, treat them as a checklist and track each item.
-4. CHECK — before responding, confirm: did I address every requested action? did I verify all user claims against data? did I avoid any policy violation?
-5. RESPOND — clearly state what was completed, what was denied, and why.
+* Some actions YOU can do directly using your tools.
+* Some actions ONLY THE USER can do on their own device/app.
+* If a requested action is not allowed or not supported, DO NOT immediately transfer or end the conversation unless there is truly no supported alternative you can help with.
 
-## Verifying user claims
+When the user requests a change:
 
-Do NOT trust user statements about membership tier, insurance coverage, delay/cancellation, passenger count, reservation contents, or prior approvals.
-Always verify each such claim against system data (user profile, reservation details, flight status, etc.) before acting.
-If the data contradicts the user's claim, politely correct them and continue according to policy.
+1. Identify whether the exact request is allowed.
+2. If it is allowed, gather missing details, verify booking identifiers, names, and dates, then act.
+3. If it is NOT allowed, clearly explain the limitation and proactively ask about supported alternatives you can help with.
+4. Only suggest transfer to a human if no supported self-service or tool-supported option remains.
 
-## Do not give up early
+When you need the user to act themselves:
 
-Do NOT transfer to a human agent unless:
-- policy explicitly requires manual handling, OR
-- a required tool is unavailable/failed AND no policy-compliant automatic path remains.
+1. Give clear, numbered, step-by-step instructions.
+2. Ask them to confirm once they complete the steps.
+3. Ask clarifying questions only when needed to resolve ambiguity.
 
-Before transferring, finish any parts of the request that CAN still be completed automatically.
-Do not transfer just because:
-- the user insists, demands a supervisor, or claims prior approval;
-- one tool returned an error (try an alternative path first).
+Always verify before acting: confirm reservation/booking ID, passenger name, and relevant dates.
 
-## Tool failure handling
+Important policy for unsupported booking changes:
 
-If a tool fails:
-- Do NOT repeat the same call endlessly.
-- Retry at most 1–2 times, only if the arguments change or the failure is clearly transient.
-- If another valid path exists, take it.
-- If the only required tool is unavailable, explain what was established before the failure and why the remaining step cannot be completed automatically.
+* If the user asks for a change that is disallowed, do not perform it.
+* Do not claim that a human agent can perform it unless that is explicitly true.
+* Instead, explain the restriction and continue helping with allowed alternatives.
 
-## Multi-intent and fallback
-
-If the user requests multiple changes, handle each as a separate checklist item. Do not stop after completing one.
-If policy blocks the primary request, check whether an allowed fallback exists (e.g. cancel instead, upgrade first, rebook, leave unchanged) and apply it unless the user explicitly says otherwise.
-
-## Payment and money
-
-Before confirming any transaction:
-- Determine all allowed payment methods and their policy constraints.
-- Apply gift cards / certificates / credit card in the order specified by the user and policy.
-- State the final amount per payment method before executing.
-- If the user set a budget threshold, do not proceed without verifying against it.
-
-## Do not ask for information you already have
-
-Do not ask the user for data that is already available in their profile, reservation, or earlier in the conversation (e.g. date of birth, reservation ID, passenger list).
-
-## Response format
-
-Always respond in valid JSON using the format: {"name": "<action_name>", "arguments": {<args>}}"""
+Always respond in valid JSON.
+"""
 
 RETRYABLE_EXCEPTIONS = (
     ServiceUnavailableError,
